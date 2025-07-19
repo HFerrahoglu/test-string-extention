@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Test String Generator",
+  "version": "1.1.0",
+  "description": "A lightweight Chrome extension designed for test data generation and multi-language localization.",
+  "update_url": "https://clients2.google.com/service/update2/crx",
+  "icons": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    },
+  "action": {
+    "default_icon": {
+      "128": "assets/icon128.png"
+    },
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "clipboardRead",
+    "clipboardWrite",
+    "storage",
+    "notifications"
+  ],
+  "web_accessible_resources": [{
+    "resources": ["data/*.json"],
+    "matches": ["<all_urls>"]
+  }],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
