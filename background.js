@@ -110,7 +110,7 @@ function migrateDataIfNeeded(previousVersion, currentVersion) {
     if (needsMigration) {
       chrome.storage.sync.set(data).then(() => {
         console.log('Data migration completed');
-});
+      });
     }
   }).catch(err => {
     console.warn('Migration failed:', err);

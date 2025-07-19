@@ -97,47 +97,73 @@ class PopupManager {
       // Show loading state
       this.setGenerateButtonState(true);
       
-      let generatedText;
-      
-      if (unit === 'words') {
-        // Generate by word count
-        generatedText = this.generateByWords(length, removeSpace, removePunct);
-      } else {
-        // Generate by character count (default)
-        generatedText = window.generateLoremIpsum(length, removeSpace, removePunct);
-      }
-      
-      if (this.elements.resultText) {
-        this.elements.resultText.value = generatedText;
-      }
+      // Generate text with slight delay for better UX
+      setTimeout(() => {
+        let text;
+        if (unit === 'words') {
+          text = window.generateWords ? window.generateWords(length) : window.generateText(length * 5);
+        } else {
+          text = window.generateText ? window.generateText(length) : this.generateFallbackText(length);
+        }
+        
+        // Apply filters
+        if (removePunct) {
+          text = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
+        }
+        
+        if (removeSpace) {
+          text = text.replace(/\s/g, '');
+        }
+        
+        // Update result
+        if (this.elements.resultText) {
+          this.elements.resultText.value = text;
+        }
+        
+        this.showFeedback(window.i18n?.translate('msg-generated') || 'Text generated successfully!');
+        this.setGenerateButtonState(false);
+      }, 100);
       
     } catch (error) {
       console.error('Generation error:', error);
-      this.showFeedback(
-        window.i18n?.translate('msg-loading-error') || 'Error generating text', 
-        'error'
-      );
-    } finally {
+      this.showFeedback(window.i18n?.translate('msg-generation-error') || 'Error generating text', 'error');
       this.setGenerateButtonState(false);
     }
   }
   
+  generateFallbackText(length) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+  
+  handleCopy() {
+    const text = this.elements.resultText?.value;
+    if (!text) {
+      this.showFeedback(window.i18n?.translate('msg-no-text') || 'No text to copy', 'error');
+      return;
+    }
+    
+    navigator.clipboard.writeText(text).then(() => {
+      this.showFeedback(window.i18n?.translate('msg-copied') || 'Copied to clipboard!');
+    }).catch(err => {
+      console.error('Failed to copy text:', err);
+      this.showFeedback(window.i18n?.translate('msg-copy-error') || 'Failed to copy text', 'error');
+    });
+  }
+  
   validateLength(length) {
-    if (isNaN(length) || length <= 0) {
-      this.showFeedback(
-        window.i18n?.translate('msg-invalid-length') || 'Please enter a valid positive number for length', 
-        'error'
-      );
-      this.clearTextarea();
+    if (isNaN(length) || length < 1) {
+      this.showFeedback(window.i18n?.translate('msg-invalid-length') || 'Please enter a valid length', 'error');
       return false;
     }
     
-    if (length > 999999) {
-      this.showFeedback(
-        window.i18n?.translate('msg-max-length') || 'Maximum length is 999,999 characters', 
-        'error'
-      );
-      this.clearTextarea();
+    const maxLength = 999999;
+    if (length > maxLength) {
+      this.showFeedback(window.i18n?.translate('msg-length-too-large') || `Length cannot exceed ${maxLength}`, 'error');
       return false;
     }
     
@@ -146,274 +172,180 @@ class PopupManager {
   
   validateLengthInput(input) {
     const value = parseInt(input.value);
+    const min = parseInt(input.min) || 1;
+    const max = parseInt(input.max) || 999999;
     
-    // Visual feedback for invalid input
-    if (input.value && (isNaN(value) || value <= 0)) {
-      input.style.borderColor = '#f44336';
-    } else if (input.value && value > 999999) {
-      input.style.borderColor = '#ff9800';
-    } else {
-      input.style.borderColor = '';
+    if (value < min) {
+      input.value = min;
+    } else if (value > max) {
+      input.value = max;
+    }
+  }
+  
+  toggleUnit() {
+    const currentUnit = this.elements.unitToggle?.getAttribute('data-unit') || 'characters';
+    const newUnit = currentUnit === 'characters' ? 'words' : 'characters';
+    
+    if (this.elements.unitToggle) {
+      this.elements.unitToggle.setAttribute('data-unit', newUnit);
+    }
+    
+    this.updateUnitToggleText();
+  }
+  
+  updateUnitToggleText() {
+    const unit = this.elements.unitToggle?.getAttribute('data-unit') || 'characters';
+    const unitLabel = this.elements.unitToggle?.querySelector('.unit-label');
+    
+    if (unitLabel && window.i18n) {
+      const translationKey = unit === 'words' ? 'unit-words' : 'unit-characters';
+      unitLabel.textContent = window.i18n.translate(translationKey);
     }
   }
   
   setGenerateButtonState(loading) {
     if (!this.elements.generateButton) return;
     
-    if (loading) {
-      this.elements.generateButton.disabled = true;
-      this.elements.generateButton.textContent = window.i18n?.translate('loading') || 'Loading...';
-    } else {
-      this.elements.generateButton.disabled = false;
-      this.elements.generateButton.textContent = window.i18n?.translate('btn-generate') || 'Generate Text';
-    }
+    this.elements.generateButton.disabled = loading;
+    this.elements.generateButton.textContent = loading 
+      ? (window.i18n?.translate('btn-generating') || 'Generating...')
+      : (window.i18n?.translate('btn-generate') || 'Generate Text');
   }
   
-  handleCopy() {
-    const resultText = this.elements.resultText?.value;
+  showFeedback(message, type = 'success') {
+    const feedback = document.createElement('div');
+    feedback.className = `feedback ${type}`;
+    feedback.textContent = message;
+    document.body.appendChild(feedback);
     
-    if (!resultText || !resultText.trim()) {
-      this.showFeedback(
-        window.i18n?.translate('msg-no-text') || 'No text to copy', 
-        'error'
-      );
-      return;
+    setTimeout(() => {
+      if (feedback.parentNode) {
+        feedback.parentNode.removeChild(feedback);
+      }
+    }, 3000);
+  }
+  
+  clearTextarea() {
+    if (this.elements.resultText) {
+      this.elements.resultText.value = '';
     }
-    
-    navigator.clipboard.writeText(resultText)
-      .then(() => {
-        this.showFeedback(
-          window.i18n?.translate('msg-copied') || 'Copied to clipboard!', 
-          'success'
-        );
-      })
-      .catch((err) => {
-        console.error('Failed to copy:', err);
-        this.showFeedback(
-          window.i18n?.translate('msg-copy-failed') || 'Failed to copy to clipboard', 
-          'error'
-        );
-      });
+    if (this.elements.counterText) {
+      this.elements.counterText.value = '';
+    }
   }
   
   initializeTabs() {
-    this.elements.tabButtons.forEach(button => {
+    this.elements.tabButtons?.forEach(button => {
       button.addEventListener('click', () => {
-        this.switchTab(button);
+        const targetTab = button.getAttribute('data-tab');
+        this.switchTab(targetTab, button);
       });
     });
   }
   
-  switchTab(activeButton) {
-    // Remove active class from all buttons and contents
-    this.elements.tabButtons.forEach(btn => btn.classList.remove('active'));
-    this.elements.tabContents.forEach(content => content.classList.remove('active'));
+  switchTab(targetTab, activeButton) {
+    // Remove active class from all tabs and buttons
+    this.elements.tabButtons?.forEach(btn => btn.classList.remove('active'));
+    this.elements.tabContents?.forEach(content => content.classList.remove('active'));
     
     // Add active class to clicked button and corresponding content
-    activeButton.classList.add('active');
-    const tabId = activeButton.getAttribute('data-tab');
-    const targetContent = document.getElementById(tabId);
+    activeButton?.classList.add('active');
+    document.getElementById(targetTab)?.classList.add('active');
     
-    if (targetContent) {
-      targetContent.classList.add('active');
-    }
+    // Clear content when switching tabs
+    this.clearTextarea();
     
-    // Focus management for accessibility
-    const firstFocusableElement = targetContent?.querySelector(
-      'input, button, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    if (firstFocusableElement) {
-      firstFocusableElement.focus();
+    // Update character count if switching to counter tab
+    if (targetTab === 'counter') {
+      this.updateCharacterCount();
     }
   }
   
   initializeCharacterCounter() {
-    if (!this.elements.counterText || !this.elements.characterCount) return;
-    
-    const updateCount = () => {
-      this.updateCharacterCount();
-    };
-    
-    this.elements.counterText.addEventListener('input', updateCount);
-    this.elements.counterText.addEventListener('paste', () => {
-      // Update count after paste
-      setTimeout(updateCount, 10);
-    });
-    
-    // Initialize with empty state
-    updateCount();
+    if (this.elements.counterText) {
+      this.elements.counterText.addEventListener('input', () => {
+        this.updateCharacterCount();
+      });
+      
+      this.elements.counterText.addEventListener('paste', () => {
+        setTimeout(() => this.updateCharacterCount(), 10);
+      });
+    }
   }
   
   updateCharacterCount() {
-    if (!this.elements.counterText || !this.elements.characterCount) return;
+    const text = this.elements.counterText?.value || '';
+    const characterCount = this.elements.characterCount;
     
-    const text = this.elements.counterText.value;
-    const chars = text.length;
-    const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
-    const lines = text.trim() === '' ? 0 : text.split('\n').length;
+    if (!characterCount) return;
     
-    // Count sentences (split by ., !, ?)
-    const sentences = text.trim() === '' ? 0 : 
-      text.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
+    const stats = this.calculateTextStats(text);
     
-    // Count paragraphs (split by double newlines or more)
-    const paragraphs = text.trim() === '' ? 0 : 
-      text.split(/\n\s*\n/).filter(p => p.trim().length > 0).length;
-    
-    // Update individual stat values
+    // Update individual stat elements
     const charCount = document.getElementById('charCount');
     const wordCount = document.getElementById('wordCount');
     const lineCount = document.getElementById('lineCount');
     const sentenceCount = document.getElementById('sentenceCount');
     const paragraphCount = document.getElementById('paragraphCount');
     
-    if (charCount) charCount.textContent = chars.toLocaleString();
-    if (wordCount) wordCount.textContent = words.toLocaleString();
-    if (lineCount) lineCount.textContent = lines.toLocaleString();
-    if (sentenceCount) sentenceCount.textContent = sentences.toLocaleString();
-    if (paragraphCount) paragraphCount.textContent = paragraphs.toLocaleString();
+    if (charCount) charCount.textContent = stats.characters;
+    if (wordCount) wordCount.textContent = stats.words;
+    if (lineCount) lineCount.textContent = stats.lines;
+    if (sentenceCount) sentenceCount.textContent = stats.sentences;
+    if (paragraphCount) paragraphCount.textContent = stats.paragraphs;
   }
   
-  toggleUnit() {
-    if (!this.elements.unitToggle) return;
-    
-    const currentUnit = this.elements.unitToggle.getAttribute('data-unit');
-    const newUnit = currentUnit === 'characters' ? 'words' : 'characters';
-    
-    this.elements.unitToggle.setAttribute('data-unit', newUnit);
-    this.updateUnitToggleText();
-  }
-  
-  updateUnitToggleText() {
-    if (!this.elements.unitToggle) return;
-    
-    const unit = this.elements.unitToggle.getAttribute('data-unit');
-    const unitLabel = this.elements.unitToggle.querySelector('.unit-label');
-    
-    if (unitLabel) {
-      const key = unit === 'words' ? 'unit-words' : 'unit-characters';
-      unitLabel.textContent = window.i18n?.translate(key) || (unit === 'words' ? 'Words' : 'Characters');
-    }
-  }
-  
-  generateByWords(wordCount, removeSpace, removePunct) {
-    const LOREM_WORDS = [
-      'lorem', 'ipsum', 'dolor', 'sit', 'amet', 'consectetur', 'adipiscing', 'elit',
-      'sed', 'do', 'eiusmod', 'tempor', 'incididunt', 'ut', 'labore', 'et', 'dolore',
-      'magna', 'aliqua', 'enim', 'ad', 'minim', 'veniam', 'quis', 'nostrud',
-      'exercitation', 'ullamco', 'laboris', 'nisi', 'aliquip', 'ex', 'ea', 'commodo',
-      'consequat', 'duis', 'aute', 'irure', 'in', 'reprehenderit', 'voluptate',
-      'velit', 'esse', 'cillum', 'fugiat', 'nulla', 'pariatur', 'excepteur', 'sint',
-      'occaecat', 'cupidatat', 'non', 'proident', 'sunt', 'culpa', 'qui', 'officia',
-      'deserunt', 'mollit', 'anim', 'id', 'est', 'laborum'
-    ];
-    
-    let words = [];
-    for (let i = 0; i < wordCount; i++) {
-      words.push(LOREM_WORDS[i % LOREM_WORDS.length]);
-    }
-    
-    let result = words.join(' ');
-    
-    // Apply transformations
-    if (removePunct) {
-      result = result.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
-    }
-    
-    if (removeSpace) {
-      result = result.replace(/\s+/g, '');
-    }
-    
-    return result;
-  }
-
-  clearTextarea() {
-    if (this.elements.resultText) {
-      this.elements.resultText.value = '';
-    }
-  }
-  
-  showFeedback(message, type) {
-    // Remove existing feedback
-    const existingFeedback = document.querySelector('.feedback');
-    if (existingFeedback) {
-      existingFeedback.remove();
-    }
-    
-    const feedbackElement = document.createElement('div');
-    feedbackElement.textContent = message;
-    feedbackElement.className = `feedback ${type}`;
-    feedbackElement.setAttribute('role', 'alert');
-    feedbackElement.setAttribute('aria-live', 'polite');
-    
-    document.body.appendChild(feedbackElement);
-    
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-      feedbackElement.remove();
-    }, 3000);
-    
-    // Remove on click
-    feedbackElement.addEventListener('click', () => {
-      feedbackElement.remove();
-    });
+  calculateTextStats(text) {
+    return {
+      characters: text.length,
+      words: text.trim() ? text.trim().split(/\s+/).length : 0,
+      lines: text ? text.split('\n').length : 0,
+      sentences: text.trim() ? (text.match(/[.!?]+/g) || []).length : 0,
+      paragraphs: text.trim() ? text.split(/\n\s*\n/).filter(p => p.trim().length > 0).length : 0
+    };
   }
 }
 
-// Legacy compatibility functions
-function clearTextarea() {
-  if (window.popupManager) {
-    window.popupManager.clearTextarea();
-  }
-}
-
-function showFeedback(message, type) {
-  if (window.popupManager) {
-    window.popupManager.showFeedback(message, type);
-  }
-}
-
+// Legacy support functions for backward compatibility
 function copyToClipboard() {
   if (window.popupManager) {
     window.popupManager.handleCopy();
   }
 }
 
+function showFeedback(message, type = 'success') {
+  if (window.popupManager) {
+    window.popupManager.showFeedback(message, type);
+  } else {
+    console.log(`${type.toUpperCase()}: ${message}`);
+  }
+}
+
+function clearTextarea() {
+  if (window.popupManager) {
+    window.popupManager.clearTextarea();
+  }
+}
+
 function initializeTabs() {
-  // Handled by PopupManager
+  // Legacy function - now handled by PopupManager
 }
 
 function initializeCharacterCounter() {
-  // Handled by PopupManager
+  // Legacy function - now handled by PopupManager
 }
 
-function initializeMiscTab() {
-  // Handled by MiscDataGenerator
+function updateCount() {
+  if (window.popupManager) {
+    window.popupManager.updateCharacterCount();
+  }
 }
 
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', async () => {
+// Initialize the popup manager when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    window.popupManager = new PopupManager();
+  });
+} else {
   window.popupManager = new PopupManager();
-  
-  // Handle runtime connection for popup clearing
-  try {
-    if (typeof chrome !== 'undefined' && chrome.runtime) {
-      const port = chrome.runtime.connect({ name: 'popup' });
-      port.onDisconnect.addListener(() => {
-        // Clean up when popup closes
-        if (window.popupManager) {
-          window.popupManager.clearTextarea();
-        }
-      });
-    }
-  } catch (error) {
-    console.warn('Could not establish runtime connection:', error);
-  }
-});
-
-// Handle popup being reopened
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && window.popupManager) {
-    window.popupManager.clearTextarea();
-  }
-});
+}

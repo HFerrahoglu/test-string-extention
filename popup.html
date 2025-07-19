@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="src/css/popup.css" />
-    <title>Test String Generator</title>
-  </head>
-  <body>
-    <div class="app-container">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test String Generator</title>
+  <link rel="stylesheet" href="src/css/popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <div class="app-content">
       <!-- Header with Settings -->
       <header class="app-header">
         <h1 data-i18n="app-title">Test String Generator</h1>
@@ -25,7 +26,7 @@
       </div>
 
       <div id="generator" class="tab-content active">
-        <div class="input-group">
+        <div class="option-group active">
           <div class="length-input-container">
             <input type="number" id="lengthInput" data-i18n-placeholder="placeholder-length" placeholder="Text Length" min="1" max="999999" value="1">
             <div class="unit-toggle">
@@ -87,15 +88,15 @@
       </div>
 
       <div id="misc" class="tab-content">
-        <select id="dataType" class="select-input">
+        <select id="dataTypeSelect" class="data-type-select">
           <option value="" data-i18n="select-data-type">Select Data Type</option>
           <option value="name" data-i18n="option-name">Full Name</option>
           <option value="email" data-i18n="option-email">Email</option>
           <option value="address" data-i18n="option-address">Address</option>
           <option value="password" data-i18n="option-password">Password</option>
         </select>
-
-        <div id="nameOptions" class="option-group">
+        
+        <div id="genderOptions" class="option-group">
           <label class="radio-wrapper">
             <input type="radio" name="gender" value="male" checked>
             <span class="radio-label" data-i18n="gender-male">Male</span>
@@ -105,9 +106,9 @@
             <span class="radio-label" data-i18n="gender-female">Female</span>
           </label>
         </div>
-
+        
         <div id="emailOptions" class="option-group">
-          <select id="emailDomain" class="select-input">
+          <select id="domainSelect" class="select-input">
             <option value="random" data-i18n="domain-random">Random Domain</option>
             <option value="example.com">example.com</option>
             <option value="test.com">test.com</option>
@@ -191,10 +192,11 @@
     </div>
 
     <script src="src/js/i18n.js"></script>
-    <script src="src/js/func.js"></script>
     <script src="src/js/copy.js"></script>
+    <script src="src/js/func.js"></script>
     <script src="src/js/popup.js"></script>
     <script src="src/js/misc.js"></script>
     <script src="src/js/settings.js"></script>
-  </body>
+  </div>
+</body>
 </html>

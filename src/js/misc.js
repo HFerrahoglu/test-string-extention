@@ -107,324 +107,346 @@ class MiscDataGenerator {
     };
     
     // Load both languages in parallel
-    const [trData, enData] = await Promise.all([
+    const [trData, enData] = await Promise.allSettled([
       loadLanguageData('tr'),
       loadLanguageData('en')
     ]);
     
-    this.DATA.tr = trData;
-    this.DATA.en = enData;
+    if (trData.status === 'fulfilled') {
+      this.DATA.tr = trData.value;
+    }
+    if (enData.status === 'fulfilled') {
+      this.DATA.en = enData.value;
+    }
+    
+    // Fallback: if EN data fails, use TR data for both
+    if (enData.status === 'rejected' && trData.status === 'fulfilled') {
+      this.DATA.en = { ...trData.value };
+    }
   }
   
-  async loadJSONFile(path) {
+  async loadJSONFile(url) {
     try {
-      let url;
-      
-      // Use chrome.runtime.getURL for extension compatibility
-      if (typeof chrome !== 'undefined' && chrome.runtime) {
-        url = chrome.runtime.getURL(path);
-      } else {
-        // Fallback for development - relative path
-        url = path;
-      }
-      
-      const response = await fetch(url);
-      
+      const response = await fetch(chrome.runtime.getURL(url));
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      return await response.json();
     } catch (error) {
-      console.warn(`Failed to load ${path}:`, error);
+      console.warn(`Failed to load ${url}:`, error);
       return [];
     }
   }
   
-  getCurrentData() {
-    return this.DATA[this.currentLanguage] || this.DATA.en;
-  }
-  
-  getRandomItem(array) {
-    if (!Array.isArray(array) || array.length === 0) {
-      return '';
+  showLoading(show) {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+      overlay.style.display = show ? 'flex' : 'none';
     }
-    return array[Math.floor(Math.random() * array.length)];
   }
   
-  generateFullName(gender) {
-    const data = this.getCurrentData();
-    const nameArray = gender === 'male' ? data.maleNames : data.femaleNames;
-    const firstName = this.getRandomItem(nameArray);
-    const surname = this.getRandomItem(data.surnames);
-    return `${firstName} ${surname}`;
-  }
-  
-  sanitizeEmailLocalPart(str) {
-    return str
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
-      .replace(/[çğıöşü]/g, match => {
-        const map = { 'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u' };
-        return map[match] || match;
-      })
-      .replace(/[^a-z0-9.]/g, '')
-      .replace(/\.+/g, '.')
-      .replace(/^\.+|\.+$/g, '');
-  }
-  
-  generateEmail(domainType, customDomain) {
-    const data = this.getCurrentData();
+  showFeedback(message, type = 'success') {
+    const feedback = document.createElement('div');
+    feedback.className = `feedback ${type}`;
+    feedback.textContent = message;
+    document.body.appendChild(feedback);
     
-    if (domainType === 'random') {
-      return this.getRandomItem(data.emails);
-    }
-    
-    // Generate a structured email
-    const gender = Math.random() > 0.5 ? 'male' : 'female';
-    const fullName = this.generateFullName(gender);
-    let localPart = fullName.toLowerCase().replace(/\s+/g, '.');
-    localPart = this.sanitizeEmailLocalPart(localPart);
-    
-    // Fallback if sanitization results in empty string
-    if (!localPart) {
-      localPart = 'user' + Math.floor(Math.random() * 1000);
-    }
-    
-    let domain;
-    if (domainType === 'custom') {
-      domain = customDomain?.trim();
-      if (!domain || !this.isValidDomain(domain)) {
-        domain = 'example.com';
+    setTimeout(() => {
+      if (feedback.parentNode) {
+        feedback.parentNode.removeChild(feedback);
       }
-    } else {
-      domain = domainType;
-    }
-    
-    return `${localPart}@${domain}`;
-  }
-  
-  isValidDomain(domain) {
-    const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/;
-    return domainRegex.test(domain) && domain.length <= 253;
-  }
-  
-  generateAddress() {
-    const data = this.getCurrentData();
-    return this.getRandomItem(data.addresses);
-  }
-  
-  generatePassword() {
-    const data = this.getCurrentData();
-    return this.getRandomItem(data.passwords);
+    }, 3000);
   }
   
   initializeUI() {
-    const dataType = document.getElementById('dataType');
-    const nameOptions = document.getElementById('nameOptions');
+    const dataTypeSelect = document.getElementById('dataTypeSelect');
+    const genderOptions = document.getElementById('genderOptions');
     const emailOptions = document.getElementById('emailOptions');
-    const emailDomain = document.getElementById('emailDomain');
     const customDomain = document.getElementById('customDomain');
+    const domainSelect = document.getElementById('domainSelect');
     const generateButton = document.getElementById('generateMiscButton');
     const copyButton = document.getElementById('copyMiscButton');
-    const resultText = document.getElementById('miscResultText');
     
-    if (!dataType) return;
+    if (!dataTypeSelect) return;
     
-    // Data type change handler
-    dataType.addEventListener('change', () => {
-      this.updateOptionGroups();
-    });
-    
-    // Email domain change handler
-    emailDomain?.addEventListener('change', () => {
-      const isCustom = emailDomain.value === 'custom';
-      if (customDomain) {
-        customDomain.style.display = isCustom ? 'block' : 'none';
-        customDomain.required = isCustom;
+    // Data type selection handler
+    dataTypeSelect.addEventListener('change', () => {
+      const selectedType = dataTypeSelect.value;
+      
+      // Hide all option groups
+      genderOptions?.classList.remove('active');
+      emailOptions?.classList.remove('active');
+      
+      // Show relevant options
+      if (selectedType === 'name') {
+        genderOptions?.classList.add('active');
+      } else if (selectedType === 'email') {
+        emailOptions?.classList.add('active');
       }
     });
     
+    // Domain selection handler
+    if (domainSelect) {
+      domainSelect.addEventListener('change', () => {
+        const isCustom = domainSelect.value === 'custom';
+        if (customDomain) {
+          customDomain.style.display = isCustom ? 'block' : 'none';
+          customDomain.required = isCustom;
+        }
+      });
+    }
+    
     // Generate button handler
-    generateButton?.addEventListener('click', () => {
-      this.handleGenerate();
-    });
+    if (generateButton) {
+      generateButton.addEventListener('click', () => this.generateMiscData());
+    }
     
     // Copy button handler
-    copyButton?.addEventListener('click', () => {
-      this.handleCopy();
-    });
-    
-    // Initialize option groups visibility
-    this.updateOptionGroups();
-  }
-  
-  updateOptionGroups() {
-    const dataType = document.getElementById('dataType');
-    const nameOptions = document.getElementById('nameOptions');
-    const emailOptions = document.getElementById('emailOptions');
-    
-    if (!dataType) return;
-    
-    const selectedType = dataType.value;
-    
-    if (nameOptions) {
-      nameOptions.style.display = selectedType === 'name' ? 'flex' : 'none';
-    }
-    
-    if (emailOptions) {
-      emailOptions.style.display = selectedType === 'email' ? 'flex' : 'none';
+    if (copyButton) {
+      copyButton.addEventListener('click', () => this.copyMiscResult());
     }
   }
   
-  async handleGenerate() {
-    // Ensure data is loaded
-    if (this.isLoading) {
-      await this.loadAllData();
-    }
+  getCurrentData() {
+    const data = this.DATA[this.currentLanguage];
+    return data && Object.keys(data).length > 0 ? data : this.DATA.tr;
+  }
+  
+  generateMiscData() {
+    const dataType = document.getElementById('dataTypeSelect')?.value;
+    const count = parseInt(document.getElementById('bulkCount')?.value || 1);
+    const format = document.getElementById('outputFormat')?.value || 'plain';
     
-    const dataType = document.getElementById('dataType');
-    const resultText = document.getElementById('miscResultText');
-    const bulkCount = document.getElementById('bulkCount');
-    const outputFormat = document.getElementById('outputFormat');
-    
-    if (!dataType || !resultText) return;
-    
-    const count = parseInt(bulkCount?.value) || 1;
-    const format = outputFormat?.value || 'plain';
-    
-    if (count > 1000) {
-      this.showFeedback('Maximum count is 1000', 'error');
+    if (!dataType) {
+      this.showFeedback(window.i18n?.translate('msg-select-type') || 'Please select a data type', 'error');
       return;
     }
     
     try {
       const results = [];
-      
       for (let i = 0; i < count; i++) {
-        let singleResult = '';
-        
-        switch (dataType.value) {
+        let result;
+        switch (dataType) {
           case 'name':
-            const genderElement = document.querySelector('input[name="gender"]:checked');
-            const gender = genderElement ? genderElement.value : 'male';
-            singleResult = this.generateFullName(gender);
+            result = this.generateFullName();
             break;
-            
           case 'email':
-            const emailDomain = document.getElementById('emailDomain');
-            const customDomain = document.getElementById('customDomain');
-            const domainValue = emailDomain ? emailDomain.value : 'random';
-            const customValue = customDomain ? customDomain.value : '';
-            singleResult = this.generateEmail(domainValue, customValue);
+            result = this.generateEmail();
             break;
-            
           case 'address':
-            singleResult = this.generateAddress();
+            result = this.generateAddress();
             break;
-            
           case 'password':
-            singleResult = this.generatePassword();
+            result = this.generatePassword();
             break;
-            
           default:
-            this.showFeedback(window.i18n?.translate('msg-select-type') || 'Please select a data type', 'error');
-            return;
+            throw new Error('Invalid data type');
         }
-        
-        if (!singleResult) {
-          this.showFeedback(window.i18n?.translate('msg-loading-error') || 'Error generating data', 'error');
-          return;
-        }
-        
-        results.push(singleResult);
+        results.push(result);
       }
       
-      // Format output
-      let finalResult = '';
-      
-      switch (format) {
-        case 'plain':
-          finalResult = results.join('\n');
-          break;
-          
-        case 'json':
-          finalResult = JSON.stringify(results, null, 2);
-          break;
-          
-        case 'json-with-id':
-          const dataWithIds = results.map((item, index) => ({
-            id: index + 1,
-            value: item
-          }));
-          finalResult = JSON.stringify(dataWithIds, null, 2);
-          break;
-          
-        default:
-          finalResult = results.join('\n');
-      }
-      
-      resultText.value = finalResult;
-      
+      this.displayResults(results, format);
+      this.showFeedback(window.i18n?.translate('msg-generated') || 'Data generated successfully!');
     } catch (error) {
       console.error('Generation error:', error);
-      this.showFeedback(window.i18n?.translate('msg-loading-error') || 'Error generating data', 'error');
+      this.showFeedback(window.i18n?.translate('msg-generation-error') || 'Error generating data', 'error');
     }
   }
   
-  handleCopy() {
-    const resultText = document.getElementById('miscResultText');
+  generateFullName() {
+    const data = this.getCurrentData();
+    const gender = document.querySelector('input[name="gender"]:checked')?.value || 'male';
     
-    if (!resultText || !resultText.value.trim()) {
-      this.showFeedback(window.i18n?.translate('msg-no-text') || 'No text to copy', 'error');
+    const firstNames = gender === 'male' ? data.maleNames : data.femaleNames;
+    const firstNamesList = Array.isArray(firstNames) ? firstNames : [];
+    const surnamesList = Array.isArray(data.surnames) ? data.surnames : [];
+    
+    if (firstNamesList.length === 0 || surnamesList.length === 0) {
+      throw new Error('Name data not available');
+    }
+    
+    const firstName = this.getRandomItem(firstNamesList);
+    const surname = this.getRandomItem(surnamesList);
+    
+    return `${firstName} ${surname}`;
+  }
+  
+  generateEmail() {
+    const data = this.getCurrentData();
+    const domainSelect = document.getElementById('domainSelect');
+    const customDomain = document.getElementById('customDomain');
+    
+    let domain;
+    if (domainSelect?.value === 'custom') {
+      domain = customDomain?.value?.trim();
+      if (!domain) {
+        throw new Error('Custom domain is required');
+      }
+    } else if (domainSelect?.value === 'random') {
+      const emailList = Array.isArray(data.emails) ? data.emails : [];
+      if (emailList.length === 0) {
+        throw new Error('Email data not available');
+      }
+      return this.getRandomItem(emailList);
+    } else {
+      domain = domainSelect?.value || 'example.com';
+    }
+    
+    // Generate a random username
+    const firstNames = [...(data.maleNames || []), ...(data.femaleNames || [])];
+    if (firstNames.length === 0) {
+      throw new Error('Name data not available for email generation');
+    }
+    
+    const name = this.getRandomItem(firstNames).toLowerCase();
+    const randomNum = Math.floor(Math.random() * 1000);
+    const username = this.sanitizeEmailLocalPart(`${name}${randomNum}`);
+    
+    return `${username}@${domain}`;
+  }
+  
+  sanitizeEmailLocalPart(str) {
+    return str
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+      .replace(/[çğıöşüÇĞIÖŞÜ]/g, (char) => {
+        const map = {
+          'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u',
+          'Ç': 'c', 'Ğ': 'g', 'I': 'i', 'Ö': 'o', 'Ş': 's', 'Ü': 'u'
+        };
+        return map[char] || char;
+      })
+      .replace(/[^a-zA-Z0-9.]/g, '')
+      .toLowerCase();
+  }
+  
+  generateAddress() {
+    const data = this.getCurrentData();
+    const addressList = Array.isArray(data.addresses) ? data.addresses : [];
+    
+    if (addressList.length === 0) {
+      throw new Error('Address data not available');
+    }
+    
+    return this.getRandomItem(addressList);
+  }
+  
+  generatePassword() {
+    const data = this.getCurrentData();
+    const passwordList = Array.isArray(data.passwords) ? data.passwords : [];
+    
+    if (passwordList.length === 0) {
+      throw new Error('Password data not available');
+    }
+    
+    return this.getRandomItem(passwordList);
+  }
+  
+  displayResults(results, format) {
+    const textarea = document.getElementById('miscResultText');
+    if (!textarea) return;
+    
+    let output;
+    switch (format) {
+      case 'json':
+        output = JSON.stringify(results, null, 2);
+        break;
+      case 'json-with-id':
+        const withIds = results.map((item, index) => ({
+          id: index + 1,
+          value: item
+        }));
+        output = JSON.stringify(withIds, null, 2);
+        break;
+      default:
+        output = results.join('\n');
+    }
+    
+    textarea.value = output;
+  }
+  
+  copyMiscResult() {
+    const textarea = document.getElementById('miscResultText');
+    if (!textarea || !textarea.value) {
+      this.showFeedback(window.i18n?.translate('msg-no-data') || 'No data to copy', 'error');
       return;
     }
     
-    navigator.clipboard.writeText(resultText.value)
-      .then(() => {
-        this.showFeedback(window.i18n?.translate('msg-copied') || 'Copied to clipboard!', 'success');
-      })
-      .catch((error) => {
-        console.error('Copy failed:', error);
-        this.showFeedback(window.i18n?.translate('msg-copy-failed') || 'Failed to copy to clipboard', 'error');
-      });
+    navigator.clipboard.writeText(textarea.value).then(() => {
+      this.showFeedback(window.i18n?.translate('msg-copied') || 'Copied to clipboard!');
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      this.showFeedback(window.i18n?.translate('msg-copy-error') || 'Failed to copy to clipboard', 'error');
+    });
   }
   
-  showLoading(show) {
-    const loadingOverlay = document.getElementById('loadingOverlay');
-    if (loadingOverlay) {
-      loadingOverlay.style.display = show ? 'flex' : 'none';
-    }
-  }
-  
-  showFeedback(message, type) {
-    // Remove existing feedback
-    const existingFeedback = document.querySelector('.feedback');
-    if (existingFeedback) {
-      existingFeedback.remove();
-    }
-    
-    const feedbackElement = document.createElement('div');
-    feedbackElement.textContent = message;
-    feedbackElement.className = `feedback ${type}`;
-    document.body.appendChild(feedbackElement);
-    
-    setTimeout(() => {
-      feedbackElement.remove();
-    }, 3000);
+  getRandomItem(array) {
+    return array[Math.floor(Math.random() * array.length)];
   }
 }
 
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  window.miscDataGenerator = new MiscDataGenerator();
-});
-
-// Legacy function for backward compatibility
-function initializeMiscTab() {
-  if (window.miscDataGenerator) {
-    window.miscDataGenerator.initializeUI();
+// Legacy support functions for backward compatibility
+async function loadData() {
+  if (!window.miscGenerator) {
+    window.miscGenerator = new MiscDataGenerator();
   }
+  return window.miscGenerator.loadAllData();
+}
+
+function getRandomItem(array) {
+  return array[Math.floor(Math.random() * array.length)];
+}
+
+function generateFullName(gender) {
+  if (!window.miscGenerator) {
+    window.miscGenerator = new MiscDataGenerator();
+  }
+  
+  // Set gender if provided
+  if (gender) {
+    const radioButton = document.querySelector(`input[name="gender"][value="${gender}"]`);
+    if (radioButton) radioButton.checked = true;
+  }
+  
+  return window.miscGenerator.generateFullName();
+}
+
+function sanitizeEmailLocalPart(str) {
+  if (!window.miscGenerator) {
+    window.miscGenerator = new MiscDataGenerator();
+  }
+  return window.miscGenerator.sanitizeEmailLocalPart(str);
+}
+
+function generateEmail(domainType, customDomain) {
+  if (!window.miscGenerator) {
+    window.miscGenerator = new MiscDataGenerator();
+  }
+  
+  // Set domain options if provided
+  const domainSelect = document.getElementById('domainSelect');
+  const customDomainInput = document.getElementById('customDomain');
+  
+  if (domainType && domainSelect) {
+    domainSelect.value = domainType;
+  }
+  if (customDomain && customDomainInput) {
+    customDomainInput.value = customDomain;
+  }
+  
+  return window.miscGenerator.generateEmail();
+}
+
+// Initialize the misc tab
+function initializeMiscTab() {
+  if (!window.miscGenerator) {
+    window.miscGenerator = new MiscDataGenerator();
+  }
+}
+
+// Auto-initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeMiscTab);
+} else {
+  initializeMiscTab();
 }

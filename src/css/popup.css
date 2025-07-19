@@ -127,6 +127,7 @@ body {
   box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
 }
 
+/* Content Areas */
 .tab-content {
   display: none;
   flex-direction: column;
@@ -138,11 +139,14 @@ body {
   display: flex;
 }
 
-/* Form Elements */
-.input-group {
-  display: flex;
+.option-group {
+  display: none;
   flex-direction: column;
   gap: 12px;
+}
+
+.option-group.active {
+  display: flex;
 }
 
 .length-input-container {
@@ -250,12 +254,13 @@ body {
   font-size: 13px;
 }
 
+/* Form Inputs */
 input[type="number"],
 input[type="text"],
 select,
 textarea {
   width: 100%;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   background: var(--surface-color);
@@ -376,6 +381,7 @@ textarea {
 /* Option Groups */
 .option-group {
   display: none;
+  flex-direction: column;
   gap: 12px;
   padding: 12px;
   background: var(--surface-color);
@@ -589,9 +595,9 @@ textarea {
 /* Feedback Messages */
 .feedback {
   position: fixed;
-  bottom: 20px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   padding: 12px 24px;
   border-radius: var(--radius);
   color: white;
